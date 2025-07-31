@@ -29,8 +29,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }
 });
 
-// Expose QRCode generation to renderer (works even with contextIsolation)
-const QRCode = require('qrcode');
-contextBridge.exposeInMainWorld('qr', {
-  toDataURL: (text, opts) => QRCode.toDataURL(text, opts)
+// Expose system info
+const os = require('os');
+contextBridge.exposeInMainWorld('system', {
+  hostname: os.hostname()
 });

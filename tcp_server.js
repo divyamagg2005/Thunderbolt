@@ -1,11 +1,14 @@
 const net = require('net');
 const http = require('http');
 const fs = require('fs');
+const WebSocket = require('ws');
 const path = require('path');
 const { BrowserWindow } = require('electron');
 const mime = require('mime-types');
 
 let server = null;
+let wss = null; // WebSocket server for signalling
+const peers = new Map(); // peerId => {socket, info}
 let httpServer = null;
 let serverStatus = {
   running: false,
@@ -35,6 +38,49 @@ function startServer(port = 3000, ip) {
 
     httpServer.listen(port, () => {
       server.listen(port + 1, () => {
+        // Start WebSocket signalling server on port+2
+        wss = new WebSocket.Server({ port: port + 2 }, () => {
+          console.log(`⚡ Thunderbolt WS Signalling Server running on ${ip}:${port + 2}`);
+        });
+
+        wss.on('connection', (ws) => {
+          ws.on('message', (msg) => {
+            try {
+              const data = JSON.parse(msg.toString());
+              if (data.type === 'register') {
+                // {type:'register', id, name, files}
+                peers.set(data.id, { socket: ws, info: data });
+                broadcastPeerList();
+              } else if (data.type === 'signal') {
+                // {type:'signal', targetId, payload}
+                const target = peers.get(data.targetId);
+                if (target) {
+                  target.socket.send(JSON.stringify({ type: 'signal', fromId: data.fromId, payload: data.payload }));
+                }
+              }
+            } catch (e) {
+              console.error('WS message error', e);
+            }
+          });
+
+          ws.on('close', () => {
+            // Remove peer that owns this socket
+            for (const [id, peer] of peers.entries()) {
+              if (peer.socket === ws) {
+                peers.delete(id);
+                break;
+              }
+            }
+            broadcastPeerList();
+          });
+        });
+
+        function broadcastPeerList() {
+          const list = Array.from(peers.values()).map(p => ({ id: p.info.id, name: p.info.name }));
+          const payload = JSON.stringify({ type: 'peerList', peers: list });
+          peers.forEach(p => p.socket.send(payload));
+        }
+
         serverStatus.running = true;
         serverStatus.port = port;
         serverStatus.ip = ip;
@@ -168,11 +214,46 @@ function serveWebInterface(res) {
                 <p class="text-gray-500 text-center py-8">No files shared yet</p>
             </div>
         </div>
+        <!-- Peers Section -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-4 text-gray-800">👥 Connected Peers</h2>
+            <ul id="peersList" class="space-y-3"></ul>
+        </div>
     </div>
 
     <script>
         let serverInfo = null;
         
+        // ---------- Mesh nickname & signalling ----------
+        const peerId = 'peer-' + Math.random().toString(36).substring(2,9);
+        let nickname = localStorage.getItem('tbNickname');
+        if(!nickname){
+          nickname = prompt('Enter your display name:','') || peerId;
+          localStorage.setItem('tbNickname', nickname);
+        }
+        let ws;
+        function connectWS(){
+          if(!serverInfo) return;
+          const wsUrl = \`ws://\${serverInfo.ip}:\${serverInfo.port+2}\`;
+          ws = new WebSocket(wsUrl);
+          ws.onopen = ()=>{
+            ws.send(JSON.stringify({type:'register', id: peerId, name: nickname}));
+          };
+          ws.onmessage = evt=>{
+            try{
+              const data = JSON.parse(evt.data);
+              if(data.type==='peerList') updatePeers(data.peers);
+            }catch(e){}
+          };
+        }
+        function updatePeers(list){
+          const ul=document.getElementById('peersList');
+          if(!ul) return;
+          ul.innerHTML='';
+          if(list.length===0){ul.innerHTML='<li class="text-gray-400">No peers yet</li>';return;}
+          list.forEach(p=>{const li=document.createElement('li');li.textContent=p.name+(p.id===peerId?' (you)':'');ul.appendChild(li);});
+        }
+
         // Load files on page load
         loadFiles();
         loadServerInfo();
@@ -291,6 +372,7 @@ function serveWebInterface(res) {
                 
                 // Update any UI elements that show server info
                 document.title = \`⚡ Thunderbolt - \${serverInfo.connectedClients} clients\`;
+                connectWS();
             } catch (error) {
                 console.error('Error loading server info:', error);
             }

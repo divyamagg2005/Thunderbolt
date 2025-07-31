@@ -4,6 +4,12 @@ class ThunderboltUI {
         this.currentServerInfo = null;
         this.activityLog = [];
         this.sharedFiles = new Map();
+        // Mesh identifiers
+        this.peerId = this.generatePeerId();
+        this.nickname = this.getOrPromptNickname();
+        this.peers = [];
+        this.peerConnections = {};
+        this.ws = null;
         
         this.initializeEventListeners();
         this.initializeDragAndDrop();
@@ -82,7 +88,7 @@ class ThunderboltUI {
                 this.serverRunning = true;
                 this.currentServerInfo = result;
                 this.addActivity('⚡ Server started successfully', 'success');
-                await this.generateQRCode(result.url);
+                this.connectSignalling();
                 this.updateUI();
             } else {
                 this.showToast('Failed to start server: ' + result.error, 'error');
@@ -167,41 +173,44 @@ class ThunderboltUI {
         this.showToast(`Added ${files.length} file(s) for sharing`, 'success');
     }
 
-    async generateQRCode(url) {
-        // Use the browser-friendly QRCode library injected via CDN (see index.html)
-        const qrcodeLib = window.qr || window.QRCode;
-        if (!qrcodeLib || !qrcodeLib.toDataURL) {
-            console.error('QRCode library not available');
+    /* QR code section removed
+
+    async updateServerStatus() {
+
+
+
+
+
             document.getElementById('qrCode').innerHTML = `
                 <div class="w-48 h-48 bg-gray-200 rounded-lg flex items-center justify-center">
-                    <span class="text-gray-500 text-center">QR Code<br/>unavailable</span>
-                </div>`;
+
+
             return;
         }
         
         try {
-            const qrDataUrl = await QRCode.toDataURL(url, {
-                width: 192,
-                margin: 2,
-                color: {
-                    dark: '#4F46E5',
-                    light: '#FFFFFF'
-                },
-                errorCorrectionLevel: 'H'
-            });
+
+
+
+
+
+
+
+
+
             
             document.getElementById('qrCode').innerHTML = `
-                <img src="${qrDataUrl}" alt="QR Code" class="w-48 h-48 rounded-lg" />
+
             `;
         } catch (error) {
-            console.error('Error generating QR code:', error);
+
             document.getElementById('qrCode').innerHTML = `
                 <div class="w-48 h-48 bg-gray-200 rounded-lg flex items-center justify-center">
-                    <span class="text-gray-500 text-center">QR Code<br/>generation failed</span>
+
                 </div>
             `;
         }
-    }
+    */
 
     async updateServerStatus() {
         try {
@@ -486,6 +495,169 @@ class ThunderboltUI {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    updateFileProgress(data) {
+        // Handle file transfer progress updates
+        console.log('File progress:', data);
+    }
+
+    /* ---------- Mesh Signalling ---------- */
+    getOrPromptNickname() {
+        let name = localStorage.getItem('tbNickname');
+        if (!name) {
+            try {
+            name = prompt('Enter your display name:', '')?.trim();
+        } catch (e) {
+            // prompt unsupported: fallback to hostname
+            name = window.system?.hostname || this.peerId;
+        }
+            if (!name) name = this.peerId;
+            localStorage.setItem('tbNickname', name);
+        }
+        return name;
+    }
+
+    generatePeerId() {
+        return 'peer-' + Math.random().toString(36).substring(2, 9);
+    }
+
+    connectSignalling() {
+        if (!this.currentServerInfo) return;
+        const wsUrl = `ws://${this.currentServerInfo.ip}:${this.currentServerInfo.port + 2}`;
+        this.ws = new WebSocket(wsUrl);
+        this.ws.onopen = () => {
+            this.ws.send(JSON.stringify({ type: 'register', id: this.peerId, name: this.nickname }));
+        };
+        this.ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'peerList') {
+                    this.peers = data.peers;
+                    this.updatePeersList();
+                } else if (data.type === 'signal') {
+                    this.handleSignal(data.fromId, data.payload);
+                }
+            } catch (e) {
+                console.error('WS message error', e);
+            }
+        };
+        this.ws.onclose = () => {
+            console.warn('Signalling connection closed');
+        };
+    }
+
+    handleSignal(fromId, payload) {
+        let pc = this.peerConnections[fromId];
+        if (!pc) pc = this.createPeerConnection(fromId);
+        if (payload.type === 'offer') {
+            pc.setRemoteDescription(new RTCSessionDescription(payload)).then(() => pc.createAnswer())
+              .then(answer => pc.setLocalDescription(answer))
+              .then(() => {
+                  this.ws.send(JSON.stringify({ type: 'signal', targetId: fromId, fromId: this.peerId, payload: pc.localDescription }));
+              });
+        } else if (payload.type === 'answer') {
+            pc.setRemoteDescription(new RTCSessionDescription(payload));
+        } else if (payload.candidate) {
+            pc.addIceCandidate(new RTCIceCandidate(payload));
+        }
+    }
+
+    createPeerConnection(peerId) {
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }] });
+        this.peerConnections[peerId] = pc;
+
+        pc.onicecandidate = (e) => {
+            if (e.candidate) {
+                this.ws.send(JSON.stringify({ type: 'signal', targetId: peerId, fromId: this.peerId, payload: { candidate: e.candidate } }));
+            }
+        };
+
+        pc.ondatachannel = (ev) => {
+            this.setupDataChannel(ev.channel, peerId, false);
+        };
+
+        return pc;
+    }
+
+    setupDataChannel(dc, peerId, isInitiator) {
+        this.peerConnections[peerId].dc = dc;
+        dc.binaryType = 'arraybuffer';
+        dc.onopen = () => {
+            console.log('DataChannel open with', peerId);
+        };
+        dc.onmessage = (ev) => {
+            console.log('Data from', peerId, ev.data);
+            // TODO: handle incoming file chunks
+        };
+        if (isInitiator) {
+            dc.onopen = () => {
+                console.log('DataChannel open with', peerId);
+            };
+        }
+    }
+
+    initiateConnection(peerId) {
+        const pc = this.createPeerConnection(peerId);
+        const dc = pc.createDataChannel('file');
+        this.setupDataChannel(dc, peerId, true);
+        pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
+            this.ws.send(JSON.stringify({ type: 'signal', targetId: peerId, fromId: this.peerId, payload: pc.localDescription }));
+        });
+    }
+
+    selectAndSendFile(peerId) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.onchange = () => {
+            const file = input.files[0];
+            if (file) {
+                this.sendFile(peerId, file);
+            }
+        };
+        input.click();
+    }
+
+    sendFile(peerId, file) {
+        const conn = this.peerConnections[peerId];
+        if (!conn || !conn.dc || conn.dc.readyState !== 'open') {
+            this.showToast('No data channel to peer', 'warning');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            conn.dc.send(JSON.stringify({ meta: { name: file.name, size: file.size } }));
+            conn.dc.send(reader.result);
+            this.addActivity(`📤 Sent ${file.name} to ${peerId}`, 'success');
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    updatePeersList() {
+        const ul = document.getElementById('peersList');
+        if (!ul) return;
+        ul.innerHTML = '';
+        if (this.peers.length === 0) {
+            ul.innerHTML = '<li class="text-gray-400">No peers yet</li>';
+            return;
+        }
+        this.peers.forEach(p => {
+            const li = document.createElement('li');
+            li.textContent = `${p.name}${p.id === this.peerId ? ' (you)' : ''}`;
+            if (p.id !== this.peerId) {
+                const connectBtn = document.createElement('button');
+                connectBtn.textContent = 'Connect';
+                connectBtn.className = 'ml-2 bg-blue-500 text-white px-2 py-1 rounded';
+                connectBtn.onclick = () => this.initiateConnection(p.id);
+                li.appendChild(connectBtn);
+                const sendBtn = document.createElement('button');
+                sendBtn.textContent = 'Send File';
+                sendBtn.className = 'ml-2 bg-green-500 text-white px-2 py-1 rounded';
+                sendBtn.onclick = () => this.selectAndSendFile(p.id);
+                li.appendChild(sendBtn);
+            }
+            ul.appendChild(li);
+        });
     }
 
     updateFileProgress(data) {

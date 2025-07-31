@@ -4,50 +4,57 @@
     "description": "⚡ Thunderbolt - Offline, super-fast, cross-platform file sharing over local hotspot",
     "main": "main.js",
     "scripts": {
-      "start": "electron .",
-      "dev": "electron . --dev",
-      "build": "electron-builder",
-      "build:win": "electron-builder --win",
-      "build:mac": "electron-builder --mac",
-      "build:linux": "electron-builder --linux",
-      "dist": "electron-builder --publish=never"
+        "start": "electron .",
+        "dev": "electron . --dev",
+        "build": "electron-builder",
+        "build:win": "electron-builder --win",
+        "build:mac": "electron-builder --mac",
+        "build:linux": "electron-builder --linux",
+        "dist": "electron-builder --publish=never"
     },
-    "keywords": ["file-sharing", "offline", "tcp", "electron", "cross-platform"],
+    "keywords": [
+        "file-sharing",
+        "offline",
+        "tcp",
+        "electron",
+        "cross-platform"
+    ],
     "author": "Thunderbolt Team",
     "license": "MIT",
     "devDependencies": {
-      "electron": "^25.0.0",
-      "electron-builder": "^24.0.0"
+        "electron": "^25.0.0",
+        "electron-builder": "^24.0.0"
     },
     "dependencies": {
-      "qrcode": "^1.5.3",
-      "archiver": "^5.3.1",
-      "mime-types": "^2.1.35"
+        "archiver": "^5.3.1",
+        "mime-types": "^2.1.35",
+        "qrcode": "^1.5.3",
+        "ws": "^8.18.3"
     },
     "build": {
-      "appId": "com.thunderbolt.app",
-      "productName": "Thunderbolt⚡",
-      "directories": {
-        "output": "dist"
-      },
-      "files": [
-        "**/*",
-        "!node_modules/**/*",
-        "node_modules/qrcode/**/*",
-        "node_modules/archiver/**/*",
-        "node_modules/mime-types/**/*"
-      ],
-      "win": {
-        "target": "nsis",
-        "icon": "assets/icon.ico"
-      },
-      "mac": {
-        "target": "dmg",
-        "icon": "assets/icon.icns"
-      },
-      "linux": {
-        "target": "AppImage",
-        "icon": "assets/icon.png"
-      }
+        "appId": "com.thunderbolt.app",
+        "productName": "Thunderbolt⚡",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "**/*",
+            "!node_modules/**/*",
+            "node_modules/qrcode/**/*",
+            "node_modules/archiver/**/*",
+            "node_modules/mime-types/**/*"
+        ],
+        "win": {
+            "target": "nsis",
+            "icon": "assets/icon.ico"
+        },
+        "mac": {
+            "target": "dmg",
+            "icon": "assets/icon.icns"
+        },
+        "linux": {
+            "target": "AppImage",
+            "icon": "assets/icon.png"
+        }
     }
-  }
+}
