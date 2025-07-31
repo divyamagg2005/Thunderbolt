@@ -1,0 +1,51 @@
+<!-- Create a placeholder for the icon files -->
+<!-- You'll need to create actual icon files for the app:
+     
+     assets/icon.png (512x512 PNG for Linux)
+     assets/icon.ico (ICO format for Windows)
+     assets/icon.icns (ICNS format for macOS)
+     
+     For now, you can use any 512x512 image as icon.png and use online converters
+     to create the .ico and .icns versions from the PNG file.
+     
+     The icon should represent a lightning bolt or thunder symbol to match
+     the "Thunderbolt" branding.
+     
+     You can create these files using:
+     - Image editing software like GIMP, Photoshop, or Canva
+     - Online icon generators
+     - CLI tools like ImageMagick
+     
+     Example commands to convert PNG to other formats:
+     
+     For ICO: convert icon.png -resize 256x256 icon.ico
+     For ICNS: png2icns icon.icns icon.png
+-->
+
+<!-- Placeholder SVG icon that you can convert to PNG/ICO/ICNS -->
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="thunderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#FFA500;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FF4500;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#bgGradient)" stroke="#4a5568" stroke-width="8"/>
+  
+  <!-- Lightning bolt -->
+  <path d="M200 80 L320 80 L280 200 L360 200 L160 380 L200 280 L120 280 L200 80 Z" 
+        fill="url(#thunderGradient)" 
+        stroke="#ffffff" 
+        stroke-width="4" 
+        stroke-linejoin="round"/>
+  
+  <!-- Glow effect -->
+  <circle cx="256" cy="256" r="240" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+</svg>
